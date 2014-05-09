@@ -1,0 +1,599 @@
+
+function example (){
+  var myDiv = Ext.get('gLibtestDiv');
+  var urlServer='http://glibrary.ct.infn.it/django/'
+  var repo='deroberto2'
+  
+  var proxy = new Ext.data.ScriptTagProxy( { url: urlServer+'glib/miguel/' } );
+  var reader= new Ext.data.JsonReader({
+    root: 'records',
+	totalProperty: 'total',
+    fields:[
+	  { name : 'Name', mapping : 'Name' },
+	  { name : 'Surname', mapping : 'Surname' },
+      { name : 'Age', mapping : 'Age' },
+      { name : 'Direction', mapping : 'Direction' }
+	]
+  });
+  
+  var store=new Ext.data.Store({
+    id : 'ourRemoteStore',
+    proxy: proxy,
+	reader: reader
+  });
+  
+  var pagingToolbar = { //1
+    xtype : 'paging',
+    store : store,
+    pageSize : 3,
+    displayInfo : true
+  }
+  /*var grid = new Ext.grid.GridPanel({
+    store: store,
+	bbar : pagingToolbar,
+	columns: [
+	  {
+	    header: 'First Name',
+		width: 100,
+		dataIndex: 'Name',
+		sortable: true
+	  },
+	  {
+	    header: 'Last Name',
+		width: 100,
+		dataIndex: 'Surname',
+		sortable: true
+	  },
+	  {
+	    header: 'Age',
+		width: 60,
+		dataIndex: 'Age',
+		sortable: true
+	  },
+	  {
+	    header: 'Address',
+		width: 120,
+		dataIndex: 'Direction',
+		sortable: true
+	  }
+	],
+	//renderTo: myDiv,
+	width: 400,
+	height: 200
+  });*/
+  
+  
+  var tree = new Ext.tree.TreePanel({
+	//xtype : 'treepanel',
+	autoScroll : true,
+	loader : new Ext.tree.TreeLoader({ // 1
+	  url : urlServer+'mountTree/'+repo+'/', //getTree
+	  requestMethod: 'GET',
+	  preloadChildren: true
+	}),
+	root : new Ext.tree.AsyncTreeNode({ // 2
+	  text : 'De Roberto',
+	  id : '0', // deroberto/Entries
+	  expanded : true
+	}),
+	height: 250
+  });
+  
+  var win=new Ext.Window({
+    title: tree.root.text,
+	width: 100,
+	height: 50,
+	layout: 'fit'
+  });
+  
+  /*var colProxy = new Ext.data.ScriptTagProxy( { url: 'http://glibrary.ct.infn.it:8000/test/' } );
+  var colReader= new Ext.data.JsonReader();
+  
+  var colStore=new Ext.data.Store({
+    id : 'colStore',
+    proxy: colProxy,
+	reader: colReader
+  }).load();
+  
+  //console.log('metada-> '+colReader.meta.fields);
+  var colGrid = new Ext.grid.GridPanel({
+    store: colStore,
+	columns: colReader.meta.fields,
+	//renderTo: myDiv,
+	width: 400,
+	height: 200
+  });*/
+  var colGrid,colStore,colReader;
+  
+  function renderIcon(val) {
+    return '<img src="data:image/jpg;base64,'+val+'" height="80"> '+'</a>';
+  }
+  
+  function columnWrap(val){
+    return '<div style="white-space:normal !important; font-family: verdana;">'+ val +'</div>';
+  }
+  
+  tree.on('click', function(n){
+    var sn = this.selModel.selNode || {}; // selNode is null on initial selection
+    if(n.id != sn.id){  // ignore clicks on folders and currently selected node  //n.leaf &&
+	  //console.log(n.text+'->'+n.id+'--'+n.attributes.path);
+	  
+	  //if(n.id==1)
+	  {
+	    Ext.Ajax.request({  
+             url: urlServer+'metadata'+n.attributes.path+'/',  
+             method: 'GET',
+             success: successAjaxFn=function(response, request) {
+			   var jsonData = Ext.util.JSON.decode(response.responseText);
+			   //console.log('jsonData-> '+jsonData.metadata.fields);
+			   
+			   var jsonReader = new Ext.data.JsonReader(jsonData.metadata);
+			   var memoryProxy = new Ext.data.ScriptTagProxy( { url: urlServer+'glib'+n.attributes.path+'/' } );
+			   var colStore=new Ext.data.Store({
+				   id : 'colStore',
+				   reader: jsonReader, //data: arrayData,
+				   proxy: memoryProxy //fields: ['FileName','TypeID','CategoryIDs']
+				   //reader: colReader=new Ext.data.JsonReader(jsonData.metadata)
+				 });
+				 var colToolbar = { //1
+				   xtype : 'paging',
+				   store : colStore,
+				   pageSize : 50,
+				   displayInfo : true
+				 }
+				 colStore.load({ // 2
+				  params : {
+					start : 0,
+					limit : 50
+				  }
+				 });
+				 
+				var j,arrayData;
+				for (j=0;j<jsonData.filters.length;j++){
+					if(jsonData.filters[j].type==='list'){
+						arrayData= jsonData.filters[j].filterList;
+						jsonData.filters[j].store= new Ext.data.ArrayStore({
+							//data : arrayData,
+							id: '0',
+							fields : [jsonData.filters[j].labelField],
+							proxy: new Ext.data.MemoryProxy(arrayData)
+						});
+					}
+				}
+				var filters = new Ext.ux.grid.GridFilters({
+					// encode and local configuration options defined previously for easier reuse
+					//encode: encode, // json encode the filter query
+					//local: true,   // defaults to false (remote filtering)
+					filters: jsonData.filters
+				});
+				 
+			   //if(colGrid===undefined){
+			   colGrid = new Ext.grid.GridPanel({
+			     bbar: colToolbar,
+				 store: colStore,
+				 columns: jsonData.columns,
+				 loadMask: true,
+				 plugins: [filters],
+				 //renderTo: myDiv,
+				 width: 400,
+				 height: 200
+			   });
+			   
+			   var column=colGrid.getColumnModel().getColumnById('thumb');
+			   column.renderer=renderIcon;
+			   
+			   //var earthPanel=Ext.getCmp('myEarthPanel');
+			   var mapwin=Ext.getCmp('myMapWin');
+			   if(!mapwin){
+			    /* earthPanel = new Ext.ux.GEarthPanel({
+						//title: 'Hello Earth!',
+						//renderTo: 'myEarth',
+						id: 'myEarthPanel',
+						width: 700,
+						height: 500,
+						earthLayers: {
+							LAYER_BUILDINGS: true,
+							LAYER_TERRAIN: true
+						},
+						earthOptions: {
+							setStatusBarVisibility: true,
+							setAtmosphereVisibility: true,
+							setMouseNavigationEnabled: true
+						}
+					});
+					earthPanel.on('earthLoaded', function(){
+						//earthPanel.findLocation('Catania');
+						var earthInstance = earthPanel.getEarth();
+						var lookAt = earthInstance.createLookAt('');
+						lookAt.setLatitude(37.607778);
+						lookAt.setLongitude(14.115833);
+						lookAt.setRange(600000.0); //default is 0.0
+
+						// Update the view in Google Earth
+						earthInstance.getView().setAbstractView(lookAt);
+					}); */
+					
+				mapwin = new Ext.Window({
+					id: 'myMapWin',
+					layout: 'fit',
+					title: 'Select the replica to download...',
+					closeAction: 'hide',
+					x: 200,
+					y: 100,
+					width: 800,
+					height: 500,
+					//items: earthPanel
+					items: {
+								xtype: 'gmappanel',
+								id: 'my-map',
+								zoomLevel: 8,
+								gmapType: 'map',
+								mapConfOpts: ['enableScrollWheelZoom','enableDoubleClickZoom','enableDragging'],
+								mapControls: ['GSmallMapControl','GMapTypeControl','NonExistantControl'],
+								setCenter: {
+									lat: 37.675125,
+									lng: 13.961975,
+									//geoCodeAddr: '4 Yawkey Way, Boston, MA, 02215-3409, USA',
+									//geoCodeAddr: 'Via Luigi Castiglione 5, 95131 Catania CT, Italia',
+									//marker: {title: 'Sicilia'}
+								}
+								/*setCenter: {
+									geoCodeAddr: 'Via Luigi Castiglione 5, 95131 Catania CT, Italia',
+									marker: false//{title: 'User '+record.get('Title')}
+								} ,
+								markers: [{
+									lat: jsonLinks[0].lat,
+									lng: jsonLinks[0].lng,
+									marker: {title: jsonLinks[0].name}
+								},{
+									lat: jsonLinks[1].lat,
+									lng: jsonLinks[1].lng,
+									marker: {title: jsonLinks[1].name}
+								},{
+									lat: jsonLinks[2].lat,
+									lng: jsonLinks[2].lng,
+									marker: {title: jsonLinks[2].name}
+								}] */
+							}
+				});
+				//mapwin.show();
+				//mapwin.hide();
+				}
+			   
+			   colGrid.on('rowclick', function(colGrid, rowIndex, e) {
+				 var record = colGrid.getStore().getAt(rowIndex);
+				 //console.log('row->'+record.get(n.attributes.path+':FILE'));
+				 
+				 Ext.Ajax.request({
+					 url: urlServer+'links2/'+repo+'/'+record.get(n.attributes.path+':FILE')+'/',
+					 method: 'GET',
+					 success: successFn=function(response, request) {
+						var jsonLinks = Ext.util.JSON.decode(response.responseText);
+						//console.log('jsonLinks->'+jsonLinks[0].autoEl.html);
+						
+						/*var southReg=Ext.getCmp('south-region');
+					    southReg.removeAll();
+					    console.log(jsonLinks);
+					    southReg.add(jsonLinks);
+					    southReg.doLayout(); */
+						
+						//var southReg=Ext.getCmp('south-region');
+						/*if(!googleMap){
+							googleMap= {
+								xtype: 'gmappanel',
+								id: 'my-map',
+								zoomLevel: 8,
+								gmapType: 'map',
+								mapConfOpts: ['enableScrollWheelZoom','enableDoubleClickZoom','enableDragging'],
+								mapControls: ['GSmallMapControl','GMapTypeControl','NonExistantControl'],
+								setCenter: {
+									geoCodeAddr: 'Via Luigi Castiglione 5, 95131 Catania CT, Italia',
+									marker: false//{title: 'User '+record.get('Title')}
+								},
+								markers: [{
+									lat: jsonLinks[0].lat,
+									lng: jsonLinks[0].lng,
+									marker: {title: jsonLinks[0].name}
+								},{
+									lat: jsonLinks[1].lat,
+									lng: jsonLinks[1].lng,
+									marker: {title: jsonLinks[1].name}
+								},{
+									lat: jsonLinks[2].lat,
+									lng: jsonLinks[2].lng,
+									marker: {title: jsonLinks[2].name}
+								}]
+							}
+							southReg.removeAll();
+							southReg.add(googleMap);
+							southReg.doLayout();
+						}
+						else{ */
+							mapwin.show();
+							var map=Ext.getCmp('my-map');
+							var marker,marker2,marker3;
+							//map.getMap().clearOverlays();
+							//marker=new GMarker(new GLatLng(jsonLinks[0].lat,jsonLinks[0].lng),{title:jsonLinks[0].name});
+							GEvent.addListener(marker, "click", function() {
+							  marker.openInfoWindowHtml(jsonLinks[0].link);
+							});
+							map.getMap().addOverlay(marker);
+							
+							//marker2=new GMarker(new GLatLng(jsonLinks[1].lat,jsonLinks[1].lng),{title:jsonLinks[1].name});
+							GEvent.addListener(marker2, "click", function() {
+							  marker2.openInfoWindowHtml(jsonLinks[1].link);
+							});
+							map.getMap().addOverlay(marker2);
+							
+							//marker3=new GMarker(new GLatLng(jsonLinks[2].lat,jsonLinks[2].lng),{title:jsonLinks[2].name});
+							GEvent.addListener(marker3, "click", function() {
+							  marker3.openInfoWindowHtml(jsonLinks[2].link);
+							});
+							//map.getMap().addOverlay(marker3);
+							
+							//southReg.doLayout();
+						// }
+
+						/*if(southReg.collapsed)
+							southReg.expand(true);*/
+						
+						//mapwin.show();
+						/* google earth version
+						var earthInstance = earthPanel.getEarth();
+						// Create the placemark.
+						var placemark = earthInstance.createPlacemark('');
+						placemark.setName(jsonLinks[0].name);
+						
+						// Define a custom icon.
+						var icon = earthInstance.createIcon('');
+						icon.setHref('http://glibrary.ct.infn.it/glibrary_new/images/data_storage_rosso.png');
+						var style = earthInstance.createStyle(''); //create a new style
+						style.getIconStyle().setIcon(icon); //apply the icon to the style
+						
+						var icon2 = earthInstance.createIcon('');
+						icon2.setHref('http://glibrary.ct.infn.it/glibrary_new/images/data_storage_verde.png');
+						var style2 = earthInstance.createStyle('');
+						style2.getIconStyle().setIcon(icon2);
+
+						// Set the placemark's location.  
+						var point = earthInstance.createPoint('');
+						point.setLatitude(parseFloat(jsonLinks[0].lat));
+						point.setLongitude(parseFloat(jsonLinks[0].lng));
+						placemark.setGeometry(point);
+						
+						placemark.setStyleSelector(style2);
+						
+						if(jsonLinks[0].enabled==0)
+							placemark.setStyleSelector(style); //apply the style to the placemark
+						else
+							google.earth.addEventListener(placemark, 'click', function(event) {
+							  // Prevent the default balloon from appearing.
+							  event.preventDefault();
+
+							  var balloon = earthInstance.createHtmlStringBalloon('');
+							  balloon.setFeature(placemark);
+							  balloon.setContentString(jsonLinks[0].link);
+							  earthInstance.setBalloon(balloon);
+							});
+						
+						
+						var placemark1 = earthInstance.createPlacemark('');
+						placemark1.setName(jsonLinks[1].name);
+						
+						placemark1.setStyleSelector(style2);
+						
+						// Set the placemark's location.  
+						var point1 = earthInstance.createPoint('');
+						point1.setLatitude(parseFloat(jsonLinks[1].lat));
+						point1.setLongitude(parseFloat(jsonLinks[1].lng));
+						placemark1.setGeometry(point1);
+						
+						if(jsonLinks[1].enabled==0)
+							placemark1.setStyleSelector(style); //apply the style to the placemark
+						else
+							google.earth.addEventListener(placemark1, 'click', function(event) {
+							  // Prevent the default balloon from appearing.
+							  event.preventDefault();
+
+							  var balloon = earthInstance.createHtmlStringBalloon('');
+							  balloon.setFeature(placemark1);
+							  balloon.setContentString(jsonLinks[1].link);
+							  earthInstance.setBalloon(balloon);
+							});
+						
+						
+						var placemark2 = earthInstance.createPlacemark('');
+						placemark2.setName(jsonLinks[2].name);
+						
+						placemark2.setStyleSelector(style2);
+
+						// Set the placemark's location.  
+						var point2 = earthInstance.createPoint('');
+						point2.setLatitude(parseFloat(jsonLinks[2].lat));
+						point2.setLongitude(parseFloat(jsonLinks[2].lng));
+						placemark2.setGeometry(point2);
+						
+						if(jsonLinks[2].enabled==0)
+							placemark2.setStyleSelector(style); //apply the style to the placemark
+						else
+							google.earth.addEventListener(placemark2, 'click', function(event) {
+							  // Prevent the default balloon from appearing.
+							  event.preventDefault();
+
+							  var balloon = earthInstance.createHtmlStringBalloon('');
+							  balloon.setFeature(placemark2);
+							  balloon.setContentString(jsonLinks[2].link);
+							  earthInstance.setBalloon(balloon);
+							});
+
+						// Add the placemark to Earth.
+						if(earthInstance.getFeatures().hasChildNodes()){
+							earthInstance.getFeatures().removeChild(earthInstance.getFeatures().getLastChild());
+							earthInstance.getFeatures().removeChild(earthInstance.getFeatures().getLastChild());
+							earthInstance.getFeatures().removeChild(earthInstance.getFeatures().getLastChild());
+							earthInstance.setBalloon(null);
+						}
+						earthInstance.getFeatures().appendChild(placemark);
+						earthInstance.getFeatures().appendChild(placemark1);
+						earthInstance.getFeatures().appendChild(placemark2); */
+					 },  
+					 failure: failureFn=function(response, request) {
+					   console.log('Error!');
+					 },
+					 timeout: 10000,
+					 params: {  
+						 //node: '1'
+					 }
+				 });
+               });
+			   
+			   var i,filtro,boton;
+			   colGrid.on('filterupdate',function() {
+			     for (i=0;i<colGrid.filters.getFilterData().length;i++)
+				 {
+					//console.log('filtro['+i+']'+colGrid.filters.getFilterData()[i].field);
+					filtro = colGrid.filters.getFilterData()[i];
+					boton=Ext.getCmp(filtro.field);
+					if(boton!==undefined)
+						boton.setText(filtro.field+'('+filtro.data.value+')');
+					else
+						colGrid.getBottomToolbar().add([
+						{
+						   text: filtro.field+'('+filtro.data.value+')',
+						   id: filtro.field,
+						   handler: function () {
+							 //console.log('quitar filtro '+this.getText());
+							 colGrid.filters.getFilter(this.getId()).setActive(false,false);
+							 colGrid.getBottomToolbar().remove(this,true);
+						   }
+						}]);
+				 }
+				 
+				 Ext.Ajax.request({
+					 url: urlServer+'test'+n.attributes.path+'/',
+					 method: 'GET',
+					 success: successFn=function(response, request) {
+						var jsonArray = Ext.util.JSON.decode(response.responseText);
+						//if(jsonData.filters[i].labelField!=='filter'+filtro.field)
+						var vArray;
+						for (j=0;j<jsonData.filters.length;j++)
+						{
+							vArray=jsonArray[j];
+							jsonData.filters[j].store.loadData(vArray);
+						}
+					 },  
+					 failure: failureFn=function(response, request) {
+					   console.log('Error!');
+					 },
+					 timeout: 10000,
+					 params: { 
+						 filterName: jsonData.filters[0].dataIndex,
+						 filterData: Ext.util.JSON.encode(colGrid.filters.getFilterData())
+					 }
+					});
+				 
+				 
+				 var centerReg=Ext.getCmp('center-region');
+				 centerReg.doLayout();
+			   });
+			   
+			   colGrid.getBottomToolbar().add([
+			   '->',
+			   {
+				  text: 'Clear All Filters',
+				  handler: function () {
+				    while(colGrid.filters.getFilterData().length > 0){
+						boton=Ext.getCmp(colGrid.filters.getFilterData()[0].field);
+						colGrid.getBottomToolbar().remove(boton);
+						colGrid.filters.getFilter(boton.getId()).setActive(false,false);
+					}
+					var centerReg=Ext.getCmp('center-region');
+					centerReg.doLayout();
+					
+					//colGrid.filters.clearFilters();
+				  } 
+			   }]);
+			   
+			   for (i=0;i<colGrid.getColumnModel().getColumnCount();i++)
+			   {
+			     column=colGrid.getColumnModel().getColumnId(i);
+				 if(column!=='thumb')
+				   colGrid.getColumnModel().setRenderer(i,columnWrap);
+			     //column.renderer=columnWrap;
+			   }
+			   
+			   var centerReg=Ext.getCmp('center-region');
+			   centerReg.removeAll();
+			   centerReg.add(colGrid);
+			   centerReg.doLayout();
+			   //}
+			 },  
+             failure: failureAjaxFn=function(response, request) {
+			   console.log('Error!');
+			 },
+             timeout: 10000,
+			 params: {  
+                 //node: '1'
+             }
+         });
+	  }
+    }
+  });
+
+  
+  var myBorderPanel = new Ext.Panel({
+    id: 'border-panel',
+    renderTo: myDiv,
+    //width: 1000,
+    height: 700,
+    title: '',
+    layout: 'border',
+    items: [/*{
+        title: '',
+        region: 'south',     // position for region
+		id: 'south-region',
+        height: 100,
+        split: false,         // enable resizing
+		collapsible: true,
+		collapsed: true,
+        //minSize: 75,         // defaults to 50
+        //maxSize: 150,
+        margins: '0 5 5 5'
+    },*/{
+        // xtype: 'panel' implied by default
+        title: '',
+        region:'west',
+        margins: '5 0 0 5',
+        width: 200,
+        collapsible: true,   // make collapsible
+        cmargins: '5 5 0 5', // adjust top margin when collapsed
+        id: 'west-region-container',
+        layout: 'fit',
+		collapseMode : 'mini',
+        //unstyled: true
+		items: tree
+    },{
+        title: 'Center Region',
+		id: 'center-region',
+        region: 'center',     // center region is required, no width/height specified
+        xtype: 'container',
+        layout: 'fit',
+        margins: '5 5 0 0',
+		//items: grid
+    }]
+  });
+  Ext.EventManager.onWindowResize(myBorderPanel.doLayout, myBorderPanel);
+  
+  /*Ext.StoreMgr.get('ourRemoteStore').load({ // 2
+      params : {
+        start : 0,
+        limit : 3
+      }
+  });*/
+
+}
+
+//google.load("earth", "1");
+//google.load("maps", "2.xx");
+
+Ext.onReady(example);
