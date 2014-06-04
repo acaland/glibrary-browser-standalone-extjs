@@ -2,7 +2,7 @@
 function example (){
   var myDiv = Ext.get('gLibtestDiv');
   var urlServer='http://glibrary.ct.infn.it/django/';
-  var repo='EEE';
+  var repo='Sitar';
   
   var proxy = new Ext.data.ScriptTagProxy( { url: urlServer+'glib/miguel/' } );
   var reader= new Ext.data.JsonReader({
@@ -72,7 +72,7 @@ function example (){
 	  preloadChildren: true
 	}),
 	root : new Ext.tree.AsyncTreeNode({ // 2
-	  text : 'EEE Repository',
+	  text : 'Sitar',
 	  id : '0', // deroberto/Entries
 	  expanded : true
 	}),
@@ -126,7 +126,8 @@ function example (){
              success: successAjaxFn=function(response, request) {
 			   var jsonData = Ext.util.JSON.decode(response.responseText);
 			   //console.log('jsonData-> '+jsonData.metadata.fields);
-			   
+			   //console.log(jsonData);
+
 			   var jsonReader = new Ext.data.JsonReader(jsonData.metadata);
 			   var memoryProxy = new Ext.data.ScriptTagProxy( { url: urlServer+'glib'+n.attributes.path+'/' } );
 			   var colStore=new Ext.data.Store({
@@ -181,8 +182,12 @@ function example (){
 			   
 			   //console.log(colGrid.getColumnModel());
 			   var column=colGrid.getColumnModel().getColumnById('thumb');
-			   //console.log(column);
-			   column.renderer=renderIcon;
+			   console.log(column);
+			   //console.log(jsonData.columns);
+			   if (column) {
+			   	column.renderer=renderIcon;	
+			   }
+			   
 			   
 			
 			   
